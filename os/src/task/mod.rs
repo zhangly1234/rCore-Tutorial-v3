@@ -10,6 +10,7 @@ mod task;
 
 use self::id::TaskUserRes;
 use crate::fs::{open_file, OpenFlags};
+use crate::sbi::shutdown;
 use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
 use manager::fetch_task;
@@ -18,7 +19,7 @@ use switch::__switch;
 
 pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle, IDLE_PID};
-pub use manager::{add_task, pid2process, remove_from_pid2process};
+pub use manager::{add_task, pid2process, remove_from_pid2process, wakeup_task};
 pub use processor::{
     current_kstack_top, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
     current_user_token, run_tasks, schedule, take_current_task,
@@ -48,7 +49,7 @@ pub fn suspend_current_and_run_next() {
 pub fn block_current_task() -> *mut TaskContext {
     let task = take_current_task().unwrap();
     let mut task_inner = task.inner_exclusive_access();
-    task_inner.task_status = TaskStatus::Blocking;
+    task_inner.task_status = TaskStatus::Blocked;
     &mut task_inner.task_cx as *mut TaskContext
 }
 
@@ -56,9 +57,8 @@ pub fn block_current_and_run_next() {
     let task_cx_ptr = block_current_task();
     schedule(task_cx_ptr);
 }
-#[cfg(feature = "board_qemu")]
-use crate::board::QEMUExit;
 
+/// Exit the current 'Running' task and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32) {
     let task = take_current_task().unwrap();
     let mut task_inner = task.inner_exclusive_access();
@@ -75,7 +75,6 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // the process should terminate at once
     if tid == 0 {
         let pid = process.getpid();
-        #[cfg(feature = "board_qemu")]
         if pid == IDLE_PID {
             println!(
                 "[kernel] Idle process exit with exit_code {} ...",
@@ -83,10 +82,10 @@ pub fn exit_current_and_run_next(exit_code: i32) {
             );
             if exit_code != 0 {
                 //crate::sbi::shutdown(255); //255 == -1 for err hint
-                crate::board::QEMU_EXIT_HANDLE.exit_failure();
+                shutdown(true);
             } else {
                 //crate::sbi::shutdown(0); //0 for success hint
-                crate::board::QEMU_EXIT_HANDLE.exit_success();
+                shutdown(false);
             }
         }
         remove_from_pid2process(pid);

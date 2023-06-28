@@ -11,7 +11,7 @@ use core::arch::{asm, global_asm};
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
-    sie, sscratch, sstatus, stval, stvec,
+    sie, sip, sscratch, sstatus, stval, stvec,
 };
 
 global_asm!(include_str!("trap.S"));
@@ -61,7 +61,7 @@ pub fn trap_handler() -> ! {
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
-    //println!("into {:?}", scause.cause());
+    // println!("into {:?}", scause.cause());
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway

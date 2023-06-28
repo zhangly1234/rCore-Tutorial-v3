@@ -2,11 +2,14 @@
 #![no_main]
 
 extern crate user_lib;
+
 extern crate alloc;
 use user_lib::{println, getpid, print};
 use alloc::vec;
 use alloc::vec::Vec;
 // use alloc::vec;
+
+
 use user_lib::{exec, fork, wait, yield_};
 use user_lib::{thread_create, get_time, pipe, write, read, close, waitpid, waittid,exit};
 use user_lib::{open, OpenFlags};
@@ -34,7 +37,7 @@ pub fn thread_c() -> ! {
 
 #[no_mangle]
 fn main() -> i32 {
-
+    
     println!("aaaaaaaaaaaaaa");
     let a = getpid();
     println!("{}",a);
@@ -71,6 +74,9 @@ fn main() -> i32 {
     // let exit_code3=waittid(c as usize);
     // println!("main thread exited.");
 
+    println!("aaaaaaaaaaaaaa");
+    let a = getpid();
+    println!("pid is {}",a);
 
 
     if fork() == 0 {

@@ -76,7 +76,10 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
-    fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
+    /// Add a new MapArea into this MemorySet.
+    /// Assuming that there are no conflicts in the virtual address
+    /// space.
+    pub fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
             map_area.copy_data(&mut self.page_table, data);
@@ -97,14 +100,14 @@ impl MemorySet {
         // map trampoline
         memory_set.map_trampoline();
         // map kernel sections
-        println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
-        println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
-        println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
-        println!(
-            ".bss [{:#x}, {:#x})",
-            sbss_with_stack as usize, ebss as usize
-        );
-        println!("mapping .text section");
+        // println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
+        // println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
+        // println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
+        // println!(
+        //     ".bss [{:#x}, {:#x})",
+        //     sbss_with_stack as usize, ebss as usize
+        // );
+        // println!("mapping .text section");
         memory_set.push(
             MapArea::new(
                 (stext as usize).into(),
@@ -114,7 +117,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .rodata section");
+        // println!("mapping .rodata section");
         memory_set.push(
             MapArea::new(
                 (srodata as usize).into(),
@@ -124,7 +127,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .data section");
+        // println!("mapping .data section");
         memory_set.push(
             MapArea::new(
                 (sdata as usize).into(),
@@ -134,7 +137,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .bss section");
+        // println!("mapping .bss section");
         memory_set.push(
             MapArea::new(
                 (sbss_with_stack as usize).into(),
@@ -144,7 +147,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping physical memory");
+        // println!("mapping physical memory");
         memory_set.push(
             MapArea::new(
                 (ekernel as usize).into(),
@@ -154,7 +157,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping memory-mapped registers");
+        //println!("mapping memory-mapped registers");
         for pair in MMIO {
             memory_set.push(
                 MapArea::new(
@@ -296,6 +299,11 @@ impl MapArea {
                 ppn = frame.ppn;
                 self.data_frames.insert(vpn, frame);
             }
+            MapType::Linear(pn_offset) => {
+                // check for sv39
+                assert!(vpn.0 < (1usize << 27));
+                ppn = PhysPageNum((vpn.0 as isize + pn_offset) as usize);
+            }
         }
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
         page_table.map(vpn, ppn, pte_flags);
@@ -344,6 +352,8 @@ impl MapArea {
 pub enum MapType {
     Identical,
     Framed,
+    /// offset of page num
+    Linear(isize),
 }
 
 bitflags! {
