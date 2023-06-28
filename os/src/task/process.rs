@@ -7,19 +7,37 @@ use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
 use crate::sync::{Condvar, Mutex, Semaphore, UPIntrFreeCell, UPIntrRefMut};
 use crate::trap::{trap_handler, TrapContext};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 
+impl core::fmt::Debug for ProcessControlBlock{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    //     writeln!(f,"pid:{:},ineer:is_zombie:{:},memory_set:{:},parent:{:},parent:{:}",self.pid.0,self.inner.exclusive_access().is_zombie,self.inner.exclusive_access().memory_set,
+    //                                         self.inner.exclusive_access().parent,self.inner.exclusive_access().children
+    // )
+    // writeln!(f,"pid:{:},ineer:is_zombie:{:}，memory_set:{:?},parent:{:?},children:{:?}",
+    // self.pid.0,self.inner.exclusive_access().is_zombie,self.inner.exclusive_access().memory_set,self.inner.exclusive_access().parent,
+    // self.inner.exclusive_access().children
+    // )
+    writeln!(f,"pid:{:},ineer:pname:{:}",
+    self.pid.0,self.inner.exclusive_access().pname
+    )
+    }
+}
+
 pub struct ProcessControlBlock {
+    // pub low:usize,
     // immutable
     pub pid: PidHandle,
     // mutable
     inner: UPIntrFreeCell<ProcessControlBlockInner>,
+    // pub high:usize,
 }
 
 pub struct ProcessControlBlockInner {
+    pub pname: String,
     pub is_zombie: bool,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<ProcessControlBlock>>,
@@ -27,7 +45,9 @@ pub struct ProcessControlBlockInner {
     pub exit_code: i32,
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
     pub signals: SignalFlags,
+    pub innerlow:usize,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
+    pub innerhigh:usize,
     pub task_res_allocator: RecycleAllocator,
     pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
@@ -74,17 +94,20 @@ impl ProcessControlBlock {
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
+        println!("memory_set:{:?}",memory_set);
         // allocate a pid
         let pid_handle = pid_alloc();
         let process = Arc::new(Self {
+            // low:0x77777777,
             pid: pid_handle,
             inner: unsafe {
                 UPIntrFreeCell::new(ProcessControlBlockInner {
+                    pname:"initproc".to_string(),
                     is_zombie: false,
                     memory_set,
                     parent: None,
                     children: Vec::new(),
-                    exit_code: 0,
+                    exit_code: 33333333,
                     fd_table: vec![
                         // 0 -> stdin
                         Some(Arc::new(Stdin)),
@@ -94,13 +117,16 @@ impl ProcessControlBlock {
                         Some(Arc::new(Stdout)),
                     ],
                     signals: SignalFlags::empty(),
+                    innerlow:0xAAAAAAAA,
                     tasks: Vec::new(),
+                    innerhigh:0xBBBBBBBB,
                     task_res_allocator: RecycleAllocator::new(),
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
                 })
             },
+            // high:0x88888888,
         });
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
@@ -128,17 +154,23 @@ impl ProcessControlBlock {
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
         add_task(task);
+        println!("prccess_addr:{:p},pid:{:?},pid_addr:{:p},process:{:?},prccess_inner_addr:{:p}",
+        &process,process.pid,&process.pid,process,&process.inner);
+        
         process
     }
 
     /// Only support processes with a single thread.
-    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
+    pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>, name:String) {
         assert_eq!(self.inner_exclusive_access().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
         let new_token = memory_set.token();
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;
+        // println!("pname:{:}",name.clone());
+        self.inner_exclusive_access().pname=name;
+        
         // then we alloc user resource for main thread again
         // since memory_set has been changed
         let task = self.inner_exclusive_access().get_task(0);
@@ -182,6 +214,7 @@ impl ProcessControlBlock {
         trap_cx.x[10] = args.len();
         trap_cx.x[11] = argv_base;
         *task_inner.get_trap_cx() = trap_cx;
+        
     }
 
     /// Only support processes with a single thread.
@@ -203,9 +236,11 @@ impl ProcessControlBlock {
         }
         // create child process pcb
         let child = Arc::new(Self {
+            // low:0x77777777,
             pid,
             inner: unsafe {
                 UPIntrFreeCell::new(ProcessControlBlockInner {
+                    pname:"".to_string(),
                     is_zombie: false,
                     memory_set,
                     parent: Some(Arc::downgrade(self)),
@@ -213,13 +248,16 @@ impl ProcessControlBlock {
                     exit_code: 0,
                     fd_table: new_fd_table,
                     signals: SignalFlags::empty(),
+                    innerlow:0xAAAAAAAA,
                     tasks: Vec::new(),
+                    innerhigh:0xBBBBBBBB,
                     task_res_allocator: RecycleAllocator::new(),
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
                 })
             },
+            // high:0x88888888,
         });
         // add child
         parent.children.push(Arc::clone(&child));

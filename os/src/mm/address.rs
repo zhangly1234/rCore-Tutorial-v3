@@ -150,6 +150,7 @@ impl From<PhysPageNum> for PhysAddr {
 impl VirtPageNum {
     pub fn indexes(&self) -> [usize; 3] {
         let mut vpn = self.0;
+        // print!("vpn:{:?}",vpn);
         let mut idx = [0usize; 3];
         for i in (0..3).rev() {
             idx[i] = vpn & 511;
@@ -196,7 +197,7 @@ impl StepByOne for PhysPageNum {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct SimpleRange<T>
 where
     T: StepByOne + Copy + PartialEq + PartialOrd + Debug,

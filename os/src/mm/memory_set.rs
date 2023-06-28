@@ -32,7 +32,12 @@ lazy_static! {
 pub fn kernel_token() -> usize {
     KERNEL_SPACE.exclusive_access().token()
 }
-
+//#[derive(Debug)]
+impl core::fmt::Debug for MemorySet{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f,"pagetable:{:?},areas:{:?}",self.page_table,self.areas)
+    }
+}
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
@@ -193,6 +198,8 @@ impl MemorySet {
                     map_perm |= MapPermission::X;
                 }
                 let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+                println!("i:{:?},start_va:{:?},end_va:{:?}",i,start_va,end_va);
+
                 max_end_vpn = map_area.vpn_range.get_end();
                 memory_set.push(
                     map_area,
@@ -244,6 +251,7 @@ impl MemorySet {
     }
 }
 
+#[derive(Debug)]
 pub struct MapArea {
     vpn_range: VPNRange,
     data_frames: BTreeMap<VirtPageNum, FrameTracker>,
@@ -260,6 +268,8 @@ impl MapArea {
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
+        // println!("start_vpn:{:?}",start_vpn);
+        // println!("end_vpn:{:?}",end_vpn);
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
             data_frames: BTreeMap::new(),

@@ -52,6 +52,12 @@ impl PageTableEntry {
     }
 }
 
+// impl core::fmt::Debug for PageTable{
+//     fn fmt(&self, f: &mut _core::fmt::Formatter<'_>) -> _core::fmt::Result {
+//         writeln!(f,"root_ppn:{:},frames:{:}",self.root_ppn,self.frames)
+//     }
+// }
+#[derive(Debug)]
 pub struct PageTable {
     root_ppn: PhysPageNum,
     frames: Vec<FrameTracker>,
